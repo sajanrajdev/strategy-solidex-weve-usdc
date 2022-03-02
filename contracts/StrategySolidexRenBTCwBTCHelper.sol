@@ -18,7 +18,7 @@ import "../interfaces/solidly/IBaseV1Router01.sol";
 import {route} from "../interfaces/solidly/IBaseV1Router01.sol";
 import {BaseStrategy} from "../deps/BaseStrategy.sol";
 
-contract StrategySolidexWeveUsdc is BaseStrategy {
+contract StrategySolidexRenBTCwBTCHelper is BaseStrategy {
     using SafeERC20Upgradeable for IERC20Upgradeable;
     using AddressUpgradeable for address;
     using SafeMathUpgradeable for uint256;
@@ -35,16 +35,15 @@ contract StrategySolidexWeveUsdc is BaseStrategy {
 
     // ===== Token Registry =====
 
-    IERC20Upgradeable public constant weve =
-        IERC20Upgradeable(0x911da02C1232A3c3E1418B834A311921143B04d7);
-    IERC20Upgradeable public constant usdc =
-        IERC20Upgradeable(0x04068DA6C83AFCFA0e13ba15A6696662335D5B75);
     IERC20Upgradeable public constant solid =
         IERC20Upgradeable(0x888EF71766ca594DED1F0FA3AE64eD2941740A20);
     IERC20Upgradeable public constant sex =
         IERC20Upgradeable(0xD31Fcd1f7Ba190dBc75354046F6024A9b86014d7);
-    IERC20Upgradeable public constant wftm =
+    IERC20Upgradeable public constant wFTM =
         IERC20Upgradeable(0x21be370D5312f44cB42ce377BC9b8a0cEF1A4C83);
+
+    IERC20Upgradeable public constant renBTC = IERC20Upgradeable(0xDBf31dF14B66535aF65AaC99C32e9eA844e14501);
+    IERC20Upgradeable public constant wBTC = IERC20Upgradeable(0x321162Cd933E2Be498Cd2267a90534A804051b11);
 
     // Constants
     uint256 public constant MAX_BPS = 10000;
@@ -103,17 +102,17 @@ contract StrategySolidexWeveUsdc is BaseStrategy {
         /// @dev do one off approvals here
         IERC20Upgradeable(want).safeApprove(address(lpDepositor), type(uint256).max);
         solid.safeApprove(uniswapV02Router, type(uint256).max);
-        wftm.safeApprove(uniswapV02Router, type(uint256).max);
+        wFTM.safeApprove(uniswapV02Router, type(uint256).max);
         sex.safeApprove(baseV1Router01, type(uint256).max);
-        weve.safeApprove(baseV1Router01, type(uint256).max);
-        usdc.safeApprove(baseV1Router01, type(uint256).max);
+        renBTC.safeApprove(baseV1Router01, type(uint256).max);
+        wBTC.safeApprove(baseV1Router01, type(uint256).max);
     }
 
     /// ===== View Functions =====
 
     // @dev Specify the name of the strategy
     function getName() external pure override returns (string memory) {
-        return "StrategySolidexWeveUsdc";
+        return "StrategySolidexRenBTCwBTCHelper";
     }
 
     // @dev Specify the version of the Strategy, for upgrades
@@ -142,11 +141,12 @@ contract StrategySolidexWeveUsdc is BaseStrategy {
         returns (address[] memory)
     {
         address[] memory protectedTokens = new address[](5);
-        protectedTokens[0] = want; // OXD/USDC LP
-        protectedTokens[1] = address(sex); // SEX
-        protectedTokens[2] = address(solid); // SOLID
-        protectedTokens[3] = address(weve); // WeVe
-        protectedTokens[4] = address(usdc); // USDC
+        protectedTokens[0] = want; // renBTC/wBTC Solid LP
+        protectedTokens[1] = address(sex);
+        protectedTokens[2] = address(solid);
+        protectedTokens[2] = address(wFTM);
+        protectedTokens[3] = address(wBTC);
+        protectedTokens[4] = address(renBTC);
         return protectedTokens;
     }
 
@@ -208,7 +208,7 @@ contract StrategySolidexWeveUsdc is BaseStrategy {
         if (solidBalance > 0) {
             address[] memory path = new address[](2);
             path[0] = address(solid);
-            path[1] = address(wftm);
+            path[1] = address(wFTM);
             _swapExactTokensForTokens_spooky(
                 uniswapV02Router,
                 solidBalance,
@@ -222,63 +222,68 @@ contract StrategySolidexWeveUsdc is BaseStrategy {
             _swapExactTokensForTokens_solidly(
                 baseV1Router01,
                 sexBalance,
-                route(address(sex), address(wftm), false) // False to use the volatile route
+                route(address(sex), address(wFTM), false) // False to use Volatile Swap
             );
         }
 
-        // 4. Swap all wFTM for USDC on Spookyswap
-        uint256 wftmBalance = wftm.balanceOf(address(this));
-        if (wftmBalance > 0) {
+        // 4. Swap all wFTM for wBTC on Spookyswap
+        uint256 wFTMBalance = wFTM.balanceOf(address(this));
+        if (wFTMBalance > 0) {
             address[] memory path = new address[](2);
-            path[0] = address(wftm);
-            path[1] = address(usdc);
+            path[0] = address(wFTM);
+            path[1] = address(wBTC);
             _swapExactTokensForTokens_spooky(
                 uniswapV02Router,
-                wftmBalance,
+                wFTMBalance,
                 path
             );
 
-            // 5. Swap half USDC for WeVe on Solidly
-            uint256 _half = usdc.balanceOf(address(this)).mul(5000).div(MAX_BPS);
+            // 5. Swap half wBTC for renBTC on Solidly
+            uint256 _half = wBTC.balanceOf(address(this)).mul(5000).div(MAX_BPS);
             _swapExactTokensForTokens_solidly(
                 baseV1Router01,
                 _half,
-                route(address(usdc), address(weve), false) // False to use the volatile route
+                route(address(wBTC), address(renBTC), true) // True to use the volatile route
             );
 
             // 6. Provide liquidity for WeVe/USDC LP Pair
-            uint256 _weveIn = weve.balanceOf(address(this));
-            uint256 _usdcIn = usdc.balanceOf(address(this));
+            uint256 _wBTCin = wBTC.balanceOf(address(this));
+            uint256 _renBTCin = renBTC.balanceOf(address(this));
             IBaseV1Router01(baseV1Router01).addLiquidity(
-                address(weve),
-                address(usdc),
-                false, // Volatile
-                _weveIn,
-                _usdcIn,
-                _weveIn.mul(sl).div(MAX_BPS),
-                _usdcIn.mul(sl).div(MAX_BPS),
+                address(wBTC),
+                address(renBTC),
+                true, // Stable
+                _wBTCin,
+                _renBTCin,
+                _wBTCin.mul(sl).div(MAX_BPS),
+                _renBTCin.mul(sl).div(MAX_BPS),
                 address(this),
                 now
             );
         }
 
-        // 7. Compound WANT
+        // 7. Process Fees
         uint256 earned =
             IERC20Upgradeable(want).balanceOf(address(this)).sub(_before);
 
-        /// Process fees
-        _processRewardsFees(earned, want);
+        if(earned > 0){
+            /// Process fees
+            _processRewardsFees(earned, want);
 
-        uint256 earnedAfterFees =
-            IERC20Upgradeable(want).balanceOf(address(this)).sub(_before);
+            // Emit to Tree the Helper Vault
 
-        _deposit(earnedAfterFees);
+            uint256 earnedAfterFees =
+                IERC20Upgradeable(want).balanceOf(address(this)).sub(_before);
 
-        /// @dev Harvest event that every strategy MUST have, see BaseStrategy
-        emit Harvest(earnedAfterFees, block.number);
+            _deposit(earnedAfterFees);
 
-        /// @dev Harvest must return the amount of want increased
-        return earnedAfterFees;
+            /// @dev Harvest event that every strategy MUST have, see BaseStrategy
+            emit Harvest(earnedAfterFees, block.number);
+
+            /// @dev Harvest must return the amount of want increased
+            return earnedAfterFees;
+        }
+        return 0;
     }
 
     /// ===== Internal Helper Functions =====
