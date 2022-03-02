@@ -55,6 +55,8 @@ def test_are_you_trying(sett_id):
     # Did the strategy do something with the asset?
     assert want.balanceOf(strategy) < available
 
+    want.approve(sett, MaxUint256, {"from": deployer}) ## Random operation to make ganache re-sync
+
     lpDepositor = interface.ILpDepositor("0x26E1A0d851CF28E697870e1b7F053B605C8b060F")
     rewards = lpDepositor.pendingRewards(strategy.address, [strategy.want()])
     print("Rewards:", rewards)

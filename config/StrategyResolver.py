@@ -108,19 +108,3 @@ class StrategyResolver(StrategyCoreResolver):
 
         super().add_entity_balances_for_tokens(calls, tokenKey, token, entities)
         return calls
-
-    def add_balances_snap(self, calls, entities):
-        super().add_balances_snap(calls, entities)
-        strategy = self.manager.strategy
-
-        solid = interface.IERC20(strategy.solid())
-        sex = interface.IERC20(strategy.sex())
-        wftm = interface.IERC20(strategy.sex())
-        usdc = interface.IERC20(strategy.usdc())
-        weve = interface.IERC20(strategy.weve())
-
-        calls = self.add_entity_balances_for_tokens(calls, "solid", solid, entities)
-        calls = self.add_entity_balances_for_tokens(calls, "sex", sex, entities)
-        calls = self.add_entity_balances_for_tokens(calls, "wftm", wftm, entities)
-        calls = self.add_entity_balances_for_tokens(calls, "usdc", usdc, entities)
-        calls = self.add_entity_balances_for_tokens(calls, "weve", weve, entities)
