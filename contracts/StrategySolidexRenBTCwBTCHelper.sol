@@ -140,13 +140,13 @@ contract StrategySolidexRenBTCwBTCHelper is BaseStrategy {
         override
         returns (address[] memory)
     {
-        address[] memory protectedTokens = new address[](5);
+        address[] memory protectedTokens = new address[](6);
         protectedTokens[0] = want; // renBTC/wBTC Solid LP
         protectedTokens[1] = address(sex);
         protectedTokens[2] = address(solid);
-        protectedTokens[2] = address(wFTM);
-        protectedTokens[3] = address(wBTC);
-        protectedTokens[4] = address(renBTC);
+        protectedTokens[3] = address(wFTM);
+        protectedTokens[4] = address(wBTC);
+        protectedTokens[5] = address(renBTC);
         return protectedTokens;
     }
 

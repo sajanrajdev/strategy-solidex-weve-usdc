@@ -58,7 +58,6 @@ class StrategyResolver(StrategyCoreResolver):
             console.print(
                 "[blue]== Solidex Strat harvest() PerformanceFeeGovernance State ==[/blue]"
             )
-            self.printState(event, keys)
 
         key = "Harvest"
         assert key in tx.events
@@ -71,7 +70,6 @@ class StrategyResolver(StrategyCoreResolver):
             assert key in event
 
         console.print("[blue]== Helper Strat harvest() State ==[/blue]")
-        self.printState(event, keys)
 
         key = "PerformanceFeeStrategist"
         assert key not in tx.events
