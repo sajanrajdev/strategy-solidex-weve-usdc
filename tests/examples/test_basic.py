@@ -28,8 +28,8 @@ def test_deploy_settings(sett_id):
     assert protected_tokens[0] == strategy.want()
     assert protected_tokens[1] == strategy.sex()
     assert protected_tokens[2] == strategy.solid()
-    assert protected_tokens[1] == strategy.weve()
-    assert protected_tokens[2] == strategy.usdc()
+    assert protected_tokens[3] == strategy.weve()
+    assert protected_tokens[4] == strategy.usdc()
 
     assert strategy.governance() == BADGER_DEV_MULTISIG
 
