@@ -264,7 +264,7 @@ contract StrategyGenericSolidexHelper is BaseStrategy {
             SOLIDLY_ROUTER.addLiquidity(
                 address(token0),
                 address(token1),
-                true, // Stable
+                IBaseV1Pair(want).stable(),
                 token0In,
                 token1In,
                 token0In.mul(sl).div(MAX_BPS),

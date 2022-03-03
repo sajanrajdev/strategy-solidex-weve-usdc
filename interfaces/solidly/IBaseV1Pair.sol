@@ -8,8 +8,8 @@ import "../erc20/IERC20.sol";
 
 interface IBaseV1Pair is IERC20 {
     function token0() external view returns (address);
-
     function token1() external view returns (address);
+    function stable() external view returns (bool);
 
     function permit(
         address owner,
