@@ -225,7 +225,6 @@ contract StrategyGenericSolidexHelper is BaseStrategy {
         return _amount;
     }
 
-    event Debug(string name, uint256 value);
 
     /// @dev Harvest from strategy mechanics, realizing increase in underlying position
     function harvest() external whenNotPaused returns (uint256 harvested) {
@@ -257,8 +256,6 @@ contract StrategyGenericSolidexHelper is BaseStrategy {
 
             // 5. Swap half wBTC for renBTC
             uint256 _half = token0.balanceOf(address(this)).mul(5000).div(MAX_BPS);
-            emit Debug("wBTC.balanceOf(address(this))", token0.balanceOf(address(this)));
-            emit Debug("_half", _half);
             _doOptimalSwap(address(token0), address(token1), _half);
 
             // 6. Provide liquidity for WeVe/USDC LP Pair
@@ -399,14 +396,13 @@ contract StrategyGenericSolidexHelper is BaseStrategy {
         path[0] = address(tokenIn);
         path[1] = address(tokenOut);
 
-        // try SPOOKY_ROUTER.getAmountsOut(amountIn, path) returns (uint256[] memory spookyAmounts) {
-        //     spookyQuote = spookyAmounts[spookyAmounts.length - 1]; // Last one is the outToken
-        // } catch (bytes memory) {
-        //     // We ignore as it means it's zero
-        // }
 
-        emit Debug("spookyQuote", spookyQuote);
-        emit Debug("solidlyQuote", solidlyQuote);
+        // NOTE: Ganache sometimes will randomly revert over this line, no clue why, you may need to comment this out for testing on forknet
+        try SPOOKY_ROUTER.getAmountsOut(amountIn, path) returns (uint256[] memory spookyAmounts) {
+            spookyQuote = spookyAmounts[spookyAmounts.length - 1]; // Last one is the outToken
+        } catch (bytes memory) {
+            // We ignore as it means it's zero
+        }
         
         // On average, we expect Solidly and Curve to offer better slippage
         // Spooky will be the default case
