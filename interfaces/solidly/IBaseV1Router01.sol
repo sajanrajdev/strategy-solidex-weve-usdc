@@ -10,6 +10,9 @@ struct route {
 
 interface IBaseV1Router01 {
 
+    function getAmountOut(uint amountIn, address tokenIn, address tokenOut) external view returns (uint amount, bool stable);
+
+
     function addLiquidity(
         address tokenA,
         address tokenB,

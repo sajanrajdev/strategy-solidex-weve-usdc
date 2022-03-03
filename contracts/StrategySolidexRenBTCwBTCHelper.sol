@@ -14,6 +14,7 @@ import "../interfaces/badger/IController.sol";
 import "../interfaces/badger/ISettV4h.sol";
 import "../interfaces/solidex/ILpDepositor.sol";
 import "../interfaces/solidly/IBaseV1Router01.sol";
+import "../interfaces/curve/ICurveRouter.sol";
 
 import {route} from "../interfaces/solidly/IBaseV1Router01.sol";
 import {BaseStrategy} from "../deps/BaseStrategy.sol";
@@ -27,12 +28,18 @@ contract StrategySolidexRenBTCwBTCHelper is BaseStrategy {
     ILpDepositor public constant lpDepositor =
         ILpDepositor(0x26E1A0d851CF28E697870e1b7F053B605C8b060F);
 
-    // Solidly
+    // Solidly Doesn't revert on failure
+    address public constant SOLIDLY_ROUTER = 0xa38cd27185a464914D3046f0AB9d43356B34829D;
     address public constant baseV1Router01 = 0xa38cd27185a464914D3046f0AB9d43356B34829D;
 
-    // Spookyswap
+    // Spookyswap, reverts on failure
+    address public constant SPOOKY_ROUTER = 0xF491e7B69E4244ad4002BC14e878a34207E38c29; // Spookyswap
     address public constant uniswapV02Router = 0xF491e7B69E4244ad4002BC14e878a34207E38c29; // Spookyswap
 
+    // Curve / Doesn't revert on failure
+    address public constant CURVE_ROUTER = 0x74E25054e98fd3FCd4bbB13A962B43E49098586f; // Curve quote and swaps
+
+    
     // ===== Token Registry =====
 
     IERC20Upgradeable public constant solid =
@@ -355,5 +362,51 @@ contract StrategySolidexRenBTCwBTCHelper is BaseStrategy {
             address(this),
             now
         );
+    }
+
+    /// @dev View function for testing the routing of the strategy
+    function findOptimalSwap(address tokenIn, address tokenOut, uint256 amountIn) external view returns (string memory, uint256 amount) {
+        // Check Solidly
+        (uint256 solidlyQuote, bool stable) = IBaseV1Router01(SOLIDLY_ROUTER).getAmountOut(amountIn, tokenIn, tokenOut);
+
+        // Check Curve
+        (, uint256 curveQuote) = ICurveRouter(CURVE_ROUTER).get_best_rate(tokenIn, tokenOut, amountIn);
+
+        uint256 spookyQuote; // 0 by default
+
+        // Check Spooky (Can Revert)
+        address[] memory path = new address[](2);
+        path[0] = address(tokenIn);
+        path[1] = address(tokenOut);
+
+        try IUniswapRouterV2(SPOOKY_ROUTER).getAmountsOut(amountIn, path) returns (uint256[] memory spookyAmounts) {
+            spookyQuote = spookyAmounts[spookyAmounts.length - 1]; // Last one is the outToken
+        } catch (bytes memory) {
+            // We ignore as it means it's zero
+        }
+        
+
+
+
+
+        // On average, we expect Solidly and Curve to offer better slippage
+        // Spooky will be the default case
+        if(solidlyQuote > spookyQuote) {
+            // Either solid or curve
+            if(curveQuote > solidlyQuote) {
+                // Curve
+                return ("curve", curveQuote);
+            } else {
+                // Solid 
+                return ("solid", solidlyQuote);
+            }
+
+        } else if (curveQuote > spookyQuote) {
+            // Curve is greater than both
+            return ("curve", curveQuote);
+        } else {
+            // Spooky is best
+            return ("spooky", spookyQuote);
+        }
     }
 }
