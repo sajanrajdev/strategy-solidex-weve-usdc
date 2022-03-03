@@ -29,15 +29,13 @@ contract StrategySolidexRenBTCwBTCHelper is BaseStrategy {
         ILpDepositor(0x26E1A0d851CF28E697870e1b7F053B605C8b060F);
 
     // Solidly Doesn't revert on failure
-    address public constant SOLIDLY_ROUTER = 0xa38cd27185a464914D3046f0AB9d43356B34829D;
-    address public constant baseV1Router01 = 0xa38cd27185a464914D3046f0AB9d43356B34829D;
+    IBaseV1Router01 public constant SOLIDLY_ROUTER = IBaseV1Router01(0xa38cd27185a464914D3046f0AB9d43356B34829D);
 
     // Spookyswap, reverts on failure
-    address public constant SPOOKY_ROUTER = 0xF491e7B69E4244ad4002BC14e878a34207E38c29; // Spookyswap
-    address public constant uniswapV02Router = 0xF491e7B69E4244ad4002BC14e878a34207E38c29; // Spookyswap
+    IUniswapRouterV2 public constant SPOOKY_ROUTER = IUniswapRouterV2(0xF491e7B69E4244ad4002BC14e878a34207E38c29); // Spookyswap
 
     // Curve / Doesn't revert on failure
-    address public constant CURVE_ROUTER = 0x74E25054e98fd3FCd4bbB13A962B43E49098586f; // Curve quote and swaps
+    ICurveRouter public constant CURVE_ROUTER = ICurveRouter(0x74E25054e98fd3FCd4bbB13A962B43E49098586f); // Curve quote and swaps
 
     
     // ===== Token Registry =====
@@ -108,11 +106,11 @@ contract StrategySolidexRenBTCwBTCHelper is BaseStrategy {
 
         /// @dev do one off approvals here
         IERC20Upgradeable(want).safeApprove(address(lpDepositor), type(uint256).max);
-        solid.safeApprove(uniswapV02Router, type(uint256).max);
-        wFTM.safeApprove(uniswapV02Router, type(uint256).max);
-        sex.safeApprove(baseV1Router01, type(uint256).max);
-        renBTC.safeApprove(baseV1Router01, type(uint256).max);
-        wBTC.safeApprove(baseV1Router01, type(uint256).max);
+        // solid.safeApprove(uniswapV02Router, type(uint256).max);
+        // wFTM.safeApprove(uniswapV02Router, type(uint256).max);
+        // sex.safeApprove(baseV1Router01, type(uint256).max);
+        // renBTC.safeApprove(baseV1Router01, type(uint256).max);
+        // wBTC.safeApprove(baseV1Router01, type(uint256).max);
     }
 
     /// ===== View Functions =====
@@ -213,50 +211,29 @@ contract StrategySolidexRenBTCwBTCHelper is BaseStrategy {
         // 2. Swap all SOLID for wFTM on Spookyswap
         uint256 solidBalance = solid.balanceOf(address(this));
         if (solidBalance > 0) {
-            address[] memory path = new address[](2);
-            path[0] = address(solid);
-            path[1] = address(wFTM);
-            _swapExactTokensForTokens_spooky(
-                uniswapV02Router,
-                solidBalance,
-                path
-            );
+            _doOptimalSwap(address(solid), address(wFTM), solidBalance);
         }
 
         // 3. Swap all SEX for wFTM on Solidly
         uint256 sexBalance = sex.balanceOf(address(this));
         if (sexBalance > 0) {
-            _swapExactTokensForTokens_solidly(
-                baseV1Router01,
-                sexBalance,
-                route(address(sex), address(wFTM), false) // False to use Volatile Swap
-            );
+            _doOptimalSwap(address(sex), address(wFTM), sexBalance);
         }
 
         // 4. Swap all wFTM for wBTC on Spookyswap
         uint256 wFTMBalance = wFTM.balanceOf(address(this));
         if (wFTMBalance > 0) {
-            address[] memory path = new address[](2);
-            path[0] = address(wFTM);
-            path[1] = address(wBTC);
-            _swapExactTokensForTokens_spooky(
-                uniswapV02Router,
-                wFTMBalance,
-                path
-            );
+            _doOptimalSwap(address(wFTM), address(wBTC), wFTMBalance);
+
 
             // 5. Swap half wBTC for renBTC on Solidly
             uint256 _half = wBTC.balanceOf(address(this)).mul(5000).div(MAX_BPS);
-            _swapExactTokensForTokens_solidly(
-                baseV1Router01,
-                _half,
-                route(address(wBTC), address(renBTC), true) // True to use the volatile route
-            );
+            _doOptimalSwap(address(wBTC), address(renBTC), _half);
 
             // 6. Provide liquidity for WeVe/USDC LP Pair
             uint256 _wBTCin = wBTC.balanceOf(address(this));
             uint256 _renBTCin = renBTC.balanceOf(address(this));
-            IBaseV1Router01(baseV1Router01).addLiquidity(
+            SOLIDLY_ROUTER.addLiquidity(
                 address(wBTC),
                 address(renBTC),
                 true, // Stable
@@ -334,36 +311,6 @@ contract StrategySolidexRenBTCwBTCHelper is BaseStrategy {
         }
     }
 
-    function _swapExactTokensForTokens_solidly(
-        address router,
-        uint256 amountIn,
-        route memory routes
-    ) internal {
-        route[] memory _route = new route[](1);
-        _route[0] = routes;
-        IBaseV1Router01(router).swapExactTokensForTokens(
-            amountIn,
-            0,
-            _route,
-            address(this),
-            now
-        );
-    }
-
-    function _swapExactTokensForTokens_spooky(
-        address router,
-        uint256 balance,
-        address[] memory path
-    ) internal {
-        IUniswapRouterV2(router).swapExactTokensForTokens(
-            balance,
-            0,
-            path,
-            address(this),
-            now
-        );
-    }
-
     /// @dev View function for testing the routing of the strategy
     function findOptimalSwap(address tokenIn, address tokenOut, uint256 amountIn) external view returns (string memory, uint256 amount) {
         // Check Solidly
@@ -385,10 +332,6 @@ contract StrategySolidexRenBTCwBTCHelper is BaseStrategy {
             // We ignore as it means it's zero
         }
         
-
-
-
-
         // On average, we expect Solidly and Curve to offer better slippage
         // Spooky will be the default case
         if(solidlyQuote > spookyQuote) {
@@ -409,4 +352,58 @@ contract StrategySolidexRenBTCwBTCHelper is BaseStrategy {
             return ("spooky", spookyQuote);
         }
     }
+
+    function _doOptimalSwap(address tokenIn, address tokenOut, uint256 amountIn) internal returns (uint256) {
+       // Check Solidly
+        (uint256 solidlyQuote, bool stable) = IBaseV1Router01(SOLIDLY_ROUTER).getAmountOut(amountIn, tokenIn, tokenOut);
+
+        // Check Curve
+        (, uint256 curveQuote) = ICurveRouter(CURVE_ROUTER).get_best_rate(tokenIn, tokenOut, amountIn);
+
+        uint256 spookyQuote; // 0 by default
+
+        // Check Spooky (Can Revert)
+        address[] memory path = new address[](2);
+        path[0] = address(tokenIn);
+        path[1] = address(tokenOut);
+
+        try SPOOKY_ROUTER.getAmountsOut(amountIn, path) returns (uint256[] memory spookyAmounts) {
+            spookyQuote = spookyAmounts[spookyAmounts.length - 1]; // Last one is the outToken
+        } catch (bytes memory) {
+            // We ignore as it means it's zero
+        }
+        
+        // On average, we expect Solidly and Curve to offer better slippage
+        // Spooky will be the default case
+        // Because we got quotes, we add them as min, but they are not guarantees we'll actually not get rekt
+        if(solidlyQuote > spookyQuote) {
+            // Either solid or curve
+            if(curveQuote > solidlyQuote) {
+                // Curve swap here
+                return CURVE_ROUTER.exchange_with_best_rate(tokenIn, tokenOut, amountIn, curveQuote);
+            } else {
+                // Solid swap here
+                route[] memory _route = new route[](1);
+                _route[0] = route(tokenIn, tokenOut, stable);
+                uint256[] memory amounts = SOLIDLY_ROUTER.swapExactTokensForTokens(amountIn, solidlyQuote, _route, address(this), now);
+                return amounts[amounts.length - 1];
+            }
+
+        } else if (curveQuote > spookyQuote) {
+            // Curve Swap here
+            return CURVE_ROUTER.exchange_with_best_rate(tokenIn, tokenOut, amountIn, curveQuote);
+        } else {
+            // Spooky swap here
+            uint256[] memory amounts = SPOOKY_ROUTER.swapExactTokensForTokens(
+                amountIn,
+                spookyQuote, // This is not a guarantee of anything beside the quote we already got, if we got frontrun we're already rekt here
+                path,
+                address(this),
+                now
+            ); // Btw, if you're frontrunning us on this contract, email me at alex@badger.finance we have actual money for you to make
+
+            return amounts[amounts.length - 1];
+        }
+    }
+
 }
