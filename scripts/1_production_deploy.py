@@ -3,7 +3,7 @@ import time
 from brownie import (
     accounts,
     network,
-    MyStrategy,
+    StrategyGenericSolidexHelper,
     SettV4,
     AdminUpgradeabilityProxy,
     Controller,
@@ -78,8 +78,8 @@ def main():
 def deploy_controller(dev, proxyAdmin):
 
     controller_logic = Controller.at(
-        "0x01d10fdc6b484BE380144dF12EB6C75387EfC49B"
-    )  # Controller Logic
+        "0xc09ECb36De87AAe031ba0E824a5DF94Ab799754f"
+    )  # Controller Logic on FTM
 
     # Deployer address will be used for all actors as controller will only be used for testing
     args = [
@@ -124,8 +124,8 @@ def deploy_vault(controller, governance, keeper, guardian, dev, proxyAdmin):
     print("Vault Arguments: ", args)
 
     vault_logic = SettV4.at(
-        "0xAF0B504BD20626d1fd57F8903898168FCE7ecbc8"
-    )  # SettV4 Logic
+        "0x18E31A50cEe0b8c716870c1bc8Bc7796e9CcD9ed"
+    )  # SettV4h on FTM Logic
 
     vault_proxy = AdminUpgradeabilityProxy.deploy(
         vault_logic,
@@ -166,7 +166,7 @@ def deploy_strategy(
 
     print("Strategy Arguments: ", args)
 
-    strat_logic = MyStrategy.deploy({"from": dev})
+    strat_logic = StrategyGenericSolidexHelper.deploy({"from": dev})
     time.sleep(sleep_between_tx)
 
     strat_proxy = AdminUpgradeabilityProxy.deploy(
@@ -179,7 +179,7 @@ def deploy_strategy(
 
     ## We delete from deploy and then fetch again so we can interact
     AdminUpgradeabilityProxy.remove(strat_proxy)
-    strat_proxy = MyStrategy.at(strat_proxy.address)
+    strat_proxy = StrategyGenericSolidexHelper.at(strat_proxy.address)
 
     console.print("[green]Strategy was deployed at: [/green]", strat_proxy.address)
 

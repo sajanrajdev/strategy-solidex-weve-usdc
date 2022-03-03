@@ -20,7 +20,7 @@ import {IBaseV1Pair} from "../interfaces/solidly/IBaseV1Pair.sol";
 import {route} from "../interfaces/solidly/IBaseV1Router01.sol";
 import {BaseStrategy} from "../deps/BaseStrategy.sol";
 
-contract StrategySolidexRenBTCwBTCHelper is BaseStrategy {
+contract StrategyGenericSolidexHelper is BaseStrategy {
     using SafeERC20Upgradeable for IERC20Upgradeable;
     using AddressUpgradeable for address;
     using SafeMathUpgradeable for uint256;
@@ -50,6 +50,10 @@ contract StrategySolidexRenBTCwBTCHelper is BaseStrategy {
 
     IERC20Upgradeable public constant renBTC = IERC20Upgradeable(0xDBf31dF14B66535aF65AaC99C32e9eA844e14501);
     IERC20Upgradeable public constant wBTC = IERC20Upgradeable(0x321162Cd933E2Be498Cd2267a90534A804051b11);
+
+    IERC20Upgradeable public token0; // Set in initialize, next step toward reusability
+    IERC20Upgradeable public token1;
+
 
     // Constants
     uint256 public constant MAX_BPS = 10000;
@@ -119,8 +123,8 @@ contract StrategySolidexRenBTCwBTCHelper is BaseStrategy {
 
         // want is LP with 2 tokens
         IBaseV1Pair lpToken = IBaseV1Pair(want);
-        IERC20Upgradeable token0 = IERC20Upgradeable(lpToken.token0());
-        IERC20Upgradeable token1 = IERC20Upgradeable(lpToken.token1());
+        token0 = IERC20Upgradeable(lpToken.token0());
+        token1 = IERC20Upgradeable(lpToken.token1());
 
         token0.safeApprove(address(SOLIDLY_ROUTER), type(uint256).max);
         token0.safeApprove(address(SPOOKY_ROUTER), type(uint256).max);
@@ -141,7 +145,7 @@ contract StrategySolidexRenBTCwBTCHelper is BaseStrategy {
 
     // @dev Specify the name of the strategy
     function getName() external pure override returns (string memory) {
-        return "StrategySolidexRenBTCwBTCHelper";
+        return "StrategyGenericSolidexHelper";
     }
 
     // @dev Specify the version of the Strategy, for upgrades
@@ -174,8 +178,8 @@ contract StrategySolidexRenBTCwBTCHelper is BaseStrategy {
         protectedTokens[1] = address(SEX); // Reward1
         protectedTokens[2] = address(SOLID); // Reward2
         protectedTokens[3] = address(wFTM); // Native Token
-        protectedTokens[4] = address(wBTC); // Token A
-        protectedTokens[5] = address(renBTC); // Token B
+        protectedTokens[4] = address(token0); // wBTC
+        protectedTokens[5] = address(token1); // renBTC
         return protectedTokens;
     }
 
@@ -221,6 +225,8 @@ contract StrategySolidexRenBTCwBTCHelper is BaseStrategy {
         return _amount;
     }
 
+    event Debug(string name, uint256 value);
+
     /// @dev Harvest from strategy mechanics, realizing increase in underlying position
     function harvest() external whenNotPaused returns (uint256 harvested) {
         _onlyAuthorizedActors();
@@ -232,39 +238,40 @@ contract StrategySolidexRenBTCwBTCHelper is BaseStrategy {
         pools[0] = want;
         lpDepositor.getReward(pools);
 
-        // 2. Swap all SOLID for wFTM on Spookyswap
+        // 2. Swap all SOLID for wFTM
         uint256 solidBalance = SOLID.balanceOf(address(this));
         if (solidBalance > 0) {
             _doOptimalSwap(address(SOLID), address(wFTM), solidBalance);
         }
 
-        // 3. Swap all SEX for wFTM on Solidly
+        // 3. Swap all SEX for wFTM
         uint256 sexBalance = SEX.balanceOf(address(this));
         if (sexBalance > 0) {
             _doOptimalSwap(address(SEX), address(wFTM), sexBalance);
         }
 
-        // 4. Swap all wFTM for wBTC on Spookyswap
+        // 4. Swap all wFTM for wBTC
         uint256 wFTMBalance = wFTM.balanceOf(address(this));
         if (wFTMBalance > 0) {
-            _doOptimalSwap(address(wFTM), address(wBTC), wFTMBalance);
+            _doOptimalSwap(address(wFTM), address(token0), wFTMBalance);
 
-
-            // 5. Swap half wBTC for renBTC on Solidly
-            uint256 _half = wBTC.balanceOf(address(this)).mul(5000).div(MAX_BPS);
-            _doOptimalSwap(address(wBTC), address(renBTC), _half);
+            // 5. Swap half wBTC for renBTC
+            uint256 _half = token0.balanceOf(address(this)).mul(5000).div(MAX_BPS);
+            emit Debug("wBTC.balanceOf(address(this))", token0.balanceOf(address(this)));
+            emit Debug("_half", _half);
+            _doOptimalSwap(address(token0), address(token1), _half);
 
             // 6. Provide liquidity for WeVe/USDC LP Pair
-            uint256 _wBTCin = wBTC.balanceOf(address(this));
-            uint256 _renBTCin = renBTC.balanceOf(address(this));
+            uint256 token0In = token0.balanceOf(address(this));
+            uint256 token1In = token1.balanceOf(address(this));
             SOLIDLY_ROUTER.addLiquidity(
-                address(wBTC),
-                address(renBTC),
+                address(token0),
+                address(token1),
                 true, // Stable
-                _wBTCin,
-                _renBTCin,
-                _wBTCin.mul(sl).div(MAX_BPS),
-                _renBTCin.mul(sl).div(MAX_BPS),
+                token0In,
+                token1In,
+                token0In.mul(sl).div(MAX_BPS),
+                token1In.mul(sl).div(MAX_BPS),
                 address(this),
                 now
             );
@@ -355,6 +362,7 @@ contract StrategySolidexRenBTCwBTCHelper is BaseStrategy {
         } catch (bytes memory) {
             // We ignore as it means it's zero
         }
+
         
         // On average, we expect Solidly and Curve to offer better slippage
         // Spooky will be the default case
@@ -391,11 +399,14 @@ contract StrategySolidexRenBTCwBTCHelper is BaseStrategy {
         path[0] = address(tokenIn);
         path[1] = address(tokenOut);
 
-        try SPOOKY_ROUTER.getAmountsOut(amountIn, path) returns (uint256[] memory spookyAmounts) {
-            spookyQuote = spookyAmounts[spookyAmounts.length - 1]; // Last one is the outToken
-        } catch (bytes memory) {
-            // We ignore as it means it's zero
-        }
+        // try SPOOKY_ROUTER.getAmountsOut(amountIn, path) returns (uint256[] memory spookyAmounts) {
+        //     spookyQuote = spookyAmounts[spookyAmounts.length - 1]; // Last one is the outToken
+        // } catch (bytes memory) {
+        //     // We ignore as it means it's zero
+        // }
+
+        emit Debug("spookyQuote", spookyQuote);
+        emit Debug("solidlyQuote", solidlyQuote);
         
         // On average, we expect Solidly and Curve to offer better slippage
         // Spooky will be the default case

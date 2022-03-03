@@ -26,10 +26,10 @@ def test_deploy_settings(sett_id):
 
     ## NOTE: Change based on how you set your contract
     assert protected_tokens[0] == strategy.want()
-    assert protected_tokens[1] == strategy.sex()
-    assert protected_tokens[2] == strategy.solid()
+    assert protected_tokens[1] == strategy.SEX()
+    assert protected_tokens[2] == strategy.SOLID()
     assert protected_tokens[3] == strategy.wFTM()
-    assert protected_tokens[4] == strategy.wBTC()
+    assert protected_tokens[4] == strategy.wBTC() ## TODO Abstract
     assert protected_tokens[5] == strategy.renBTC()
 
     assert strategy.governance() == BADGER_DEV_MULTISIG

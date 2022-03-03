@@ -98,11 +98,5 @@ class StrategyResolver(StrategyCoreResolver):
         assert True
 
     def add_entity_balances_for_tokens(self, calls, tokenKey, token, entities):
-        entities["strategy"] = self.manager.strategy.address
-        entities["lpDepositor"] = self.manager.strategy.lpDepositor()
-        entities["baseV1Router01"] = self.manager.strategy.baseV1Router01()
-        entities["gauge"] = "0xA0ce41C44C2108947e7a5291fE3181042AFfdae7"
-
-
         super().add_entity_balances_for_tokens(calls, tokenKey, token, entities)
         return calls
