@@ -16,6 +16,7 @@ import "../interfaces/solidex/ILpDepositor.sol";
 import "../interfaces/solidly/IBaseV1Router01.sol";
 import "../interfaces/curve/ICurveRouter.sol";
 
+import {IBaseV1Pair} from "../interfaces/solidly/IBaseV1Pair.sol";
 import {route} from "../interfaces/solidly/IBaseV1Router01.sol";
 import {BaseStrategy} from "../deps/BaseStrategy.sol";
 
@@ -40,9 +41,9 @@ contract StrategySolidexRenBTCwBTCHelper is BaseStrategy {
     
     // ===== Token Registry =====
 
-    IERC20Upgradeable public constant solid =
+    IERC20Upgradeable public constant SOLID =
         IERC20Upgradeable(0x888EF71766ca594DED1F0FA3AE64eD2941740A20);
-    IERC20Upgradeable public constant sex =
+    IERC20Upgradeable public constant SEX =
         IERC20Upgradeable(0xD31Fcd1f7Ba190dBc75354046F6024A9b86014d7);
     IERC20Upgradeable public constant wFTM =
         IERC20Upgradeable(0x21be370D5312f44cB42ce377BC9b8a0cEF1A4C83);
@@ -106,11 +107,34 @@ contract StrategySolidexRenBTCwBTCHelper is BaseStrategy {
 
         /// @dev do one off approvals here
         IERC20Upgradeable(want).safeApprove(address(lpDepositor), type(uint256).max);
-        // solid.safeApprove(uniswapV02Router, type(uint256).max);
-        // wFTM.safeApprove(uniswapV02Router, type(uint256).max);
-        // sex.safeApprove(baseV1Router01, type(uint256).max);
-        // renBTC.safeApprove(baseV1Router01, type(uint256).max);
-        // wBTC.safeApprove(baseV1Router01, type(uint256).max);
+
+        // Solidex is 2 rewards, these are hardcoded as they are part of all strategies and can't change
+        SOLID.safeApprove(address(SOLIDLY_ROUTER), type(uint256).max);
+        SOLID.safeApprove(address(SPOOKY_ROUTER), type(uint256).max);
+        SOLID.safeApprove(address(CURVE_ROUTER), type(uint256).max);
+
+        SEX.safeApprove(address(SOLIDLY_ROUTER), type(uint256).max);
+        SEX.safeApprove(address(SPOOKY_ROUTER), type(uint256).max);
+        SEX.safeApprove(address(CURVE_ROUTER), type(uint256).max);
+
+        // want is LP with 2 tokens
+        IBaseV1Pair lpToken = IBaseV1Pair(want);
+        IERC20Upgradeable token0 = IERC20Upgradeable(lpToken.token0());
+        IERC20Upgradeable token1 = IERC20Upgradeable(lpToken.token1());
+
+        token0.safeApprove(address(SOLIDLY_ROUTER), type(uint256).max);
+        token0.safeApprove(address(SPOOKY_ROUTER), type(uint256).max);
+        token0.safeApprove(address(CURVE_ROUTER), type(uint256).max);
+
+        token1.safeApprove(address(SOLIDLY_ROUTER), type(uint256).max);
+        token1.safeApprove(address(SPOOKY_ROUTER), type(uint256).max);
+        token1.safeApprove(address(CURVE_ROUTER), type(uint256).max);
+
+
+        // Extra approve is for wFTM as we need a liquid token for certain swaps
+        wFTM.safeApprove(address(SOLIDLY_ROUTER), type(uint256).max);
+        wFTM.safeApprove(address(SPOOKY_ROUTER), type(uint256).max);
+        wFTM.safeApprove(address(CURVE_ROUTER), type(uint256).max);
     }
 
     /// ===== View Functions =====
@@ -147,8 +171,8 @@ contract StrategySolidexRenBTCwBTCHelper is BaseStrategy {
     {
         address[] memory protectedTokens = new address[](6);
         protectedTokens[0] = want; // renBTC/wBTC Solid LP
-        protectedTokens[1] = address(sex); // Reward1
-        protectedTokens[2] = address(solid); // Reward2
+        protectedTokens[1] = address(SEX); // Reward1
+        protectedTokens[2] = address(SOLID); // Reward2
         protectedTokens[3] = address(wFTM); // Native Token
         protectedTokens[4] = address(wBTC); // Token A
         protectedTokens[5] = address(renBTC); // Token B
@@ -209,15 +233,15 @@ contract StrategySolidexRenBTCwBTCHelper is BaseStrategy {
         lpDepositor.getReward(pools);
 
         // 2. Swap all SOLID for wFTM on Spookyswap
-        uint256 solidBalance = solid.balanceOf(address(this));
+        uint256 solidBalance = SOLID.balanceOf(address(this));
         if (solidBalance > 0) {
-            _doOptimalSwap(address(solid), address(wFTM), solidBalance);
+            _doOptimalSwap(address(SOLID), address(wFTM), solidBalance);
         }
 
         // 3. Swap all SEX for wFTM on Solidly
-        uint256 sexBalance = sex.balanceOf(address(this));
+        uint256 sexBalance = SEX.balanceOf(address(this));
         if (sexBalance > 0) {
-            _doOptimalSwap(address(sex), address(wFTM), sexBalance);
+            _doOptimalSwap(address(SEX), address(wFTM), sexBalance);
         }
 
         // 4. Swap all wFTM for wBTC on Spookyswap
@@ -335,13 +359,13 @@ contract StrategySolidexRenBTCwBTCHelper is BaseStrategy {
         // On average, we expect Solidly and Curve to offer better slippage
         // Spooky will be the default case
         if(solidlyQuote > spookyQuote) {
-            // Either solid or curve
+            // Either SOLID or curve
             if(curveQuote > solidlyQuote) {
                 // Curve
                 return ("curve", curveQuote);
             } else {
                 // Solid 
-                return ("solid", solidlyQuote);
+                return ("SOLID", solidlyQuote);
             }
 
         } else if (curveQuote > spookyQuote) {
@@ -377,7 +401,7 @@ contract StrategySolidexRenBTCwBTCHelper is BaseStrategy {
         // Spooky will be the default case
         // Because we got quotes, we add them as min, but they are not guarantees we'll actually not get rekt
         if(solidlyQuote > spookyQuote) {
-            // Either solid or curve
+            // Either SOLID or curve
             if(curveQuote > solidlyQuote) {
                 // Curve swap here
                 return CURVE_ROUTER.exchange_with_best_rate(tokenIn, tokenOut, amountIn, curveQuote);
